@@ -2,7 +2,7 @@
 
 #
 # Deep Sci-Fi Stack Stop Script
-# Stops: Web App + Letta Server (Docker) + PostgreSQL
+# Stops: Web App + Kelpie Server + PostgreSQL
 #
 
 # Colors
@@ -13,7 +13,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-LETTA_DIR="$SCRIPT_DIR/letta"
+KELPIE_DIR="$SCRIPT_DIR/kelpie"
 
 echo -e "${BLUE}╔════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║   Deep Sci-Fi - Stop Script               ║${NC}"
@@ -53,42 +53,35 @@ else
     fi
 fi
 
-# Stop Letta UI
+# Stop Kelpie server
 echo ""
-echo -e "${YELLOW}Stopping Letta UI...${NC}"
-UI_PID_FILE="$SCRIPT_DIR/letta-ui/.ui.pid"
-if [ -f "$UI_PID_FILE" ]; then
-    UI_PID=$(cat "$UI_PID_FILE")
-    if kill -0 $UI_PID 2>/dev/null; then
-        kill $UI_PID 2>/dev/null
-        echo -e "${GREEN}✓ Letta UI stopped (PID: $UI_PID)${NC}"
+echo -e "${YELLOW}Stopping Kelpie server...${NC}"
+KELPIE_PID_FILE="$KELPIE_DIR/.kelpie.pid"
+if [ -f "$KELPIE_PID_FILE" ]; then
+    KELPIE_PID=$(cat "$KELPIE_PID_FILE")
+    if kill -0 $KELPIE_PID 2>/dev/null; then
+        kill $KELPIE_PID 2>/dev/null
+        # Wait for graceful shutdown
+        sleep 2
+        # Force kill if still running
+        if kill -0 $KELPIE_PID 2>/dev/null; then
+            kill -9 $KELPIE_PID 2>/dev/null
+        fi
+        echo -e "${GREEN}✓ Kelpie server stopped (PID: $KELPIE_PID)${NC}"
     else
-        echo -e "${YELLOW}⚠ Letta UI was not running${NC}"
+        echo -e "${YELLOW}⚠ Kelpie server was not running${NC}"
     fi
-    rm -f "$UI_PID_FILE"
+    rm -f "$KELPIE_PID_FILE"
 else
     # Try to find and kill by process name
-    if pgrep -f "letta-ui.*server.ts" > /dev/null; then
-        pkill -f "letta-ui.*server.ts" 2>/dev/null
-        echo -e "${GREEN}✓ Letta UI stopped${NC}"
+    if pgrep -f "kelpie-server" > /dev/null; then
+        pkill -f "kelpie-server" 2>/dev/null
+        sleep 2
+        echo -e "${GREEN}✓ Kelpie server stopped${NC}"
     else
-        echo -e "${YELLOW}⚠ Letta UI was not running${NC}"
+        echo -e "${YELLOW}⚠ Kelpie server was not running${NC}"
     fi
 fi
-
-# Stop Letta containers
-echo ""
-echo -e "${YELLOW}Stopping Letta server containers...${NC}"
-cd "$LETTA_DIR"
-
-if docker compose -f dev-compose.yaml ps -q 2>/dev/null | grep -q .; then
-    docker compose -f dev-compose.yaml down
-    echo -e "${GREEN}✓ Letta containers stopped${NC}"
-else
-    echo -e "${YELLOW}⚠ No Letta containers were running${NC}"
-fi
-
-cd "$SCRIPT_DIR"
 
 # Stop PostgreSQL container
 echo ""
@@ -98,14 +91,6 @@ if docker ps | grep -q "deep-sci-fi-postgres"; then
     echo -e "${GREEN}✓ PostgreSQL stopped${NC}"
 else
     echo -e "${YELLOW}⚠ PostgreSQL was not running${NC}"
-fi
-
-# Stop any letta-code processes if running
-if pgrep -f "bun.*letta-code" > /dev/null; then
-    echo ""
-    echo -e "${YELLOW}Stopping letta-code processes...${NC}"
-    pkill -f "bun.*letta-code" 2>/dev/null
-    echo -e "${GREEN}✓ letta-code stopped${NC}"
 fi
 
 echo ""

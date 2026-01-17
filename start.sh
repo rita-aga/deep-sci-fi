@@ -74,30 +74,61 @@ else
     print_success "PostgreSQL running on localhost:5433"
 fi
 
-# 2. Start Letta Server
+# 2. Start Kelpie Server
 echo ""
-echo "🤖 Starting Letta Server..."
-cd letta
-if docker-compose ps | grep -q "letta.*Up"; then
-    print_success "Letta server already running"
-else
-    print_warning "Starting Letta server..."
-    docker-compose up -d
+echo "🤖 Starting Kelpie Server..."
+cd kelpie
 
-    # Wait for Letta to be ready
-    echo "Waiting for Letta server to be ready..."
-    for i in {1..30}; do
-        if curl -s http://localhost:8285/health > /dev/null 2>&1; then
-            print_success "Letta server ready on localhost:8285"
-            break
-        fi
-        if [ $i -eq 30 ]; then
-            print_error "Letta server failed to start"
-            exit 1
-        fi
-        sleep 1
-    done
+# Check if .env exists in kelpie directory, otherwise use root .env
+if [ -f ".env" ]; then
+    print_success "Loading environment from kelpie/.env"
+    source .env
+elif [ -f "../.env" ]; then
+    print_success "Loading environment from root .env"
+    source ../.env
+else
+    print_warning "No .env file found, API keys must be set in environment"
 fi
+
+# Check if FoundationDB cluster file exists
+FDB_CLUSTER_FILE="/usr/local/etc/foundationdb/fdb.cluster"
+if [ ! -f "$FDB_CLUSTER_FILE" ]; then
+    print_error "FoundationDB cluster file not found at $FDB_CLUSTER_FILE"
+    print_error "Please install FoundationDB or update the path"
+    exit 1
+fi
+
+# Kill any existing Kelpie server
+if [ -f ".kelpie.pid" ]; then
+    OLD_PID=$(cat .kelpie.pid)
+    if kill -0 $OLD_PID 2>/dev/null; then
+        print_warning "Stopping existing Kelpie server (PID: $OLD_PID)..."
+        kill $OLD_PID 2>/dev/null || true
+        sleep 2
+    fi
+    rm -f .kelpie.pid
+fi
+
+# Start Kelpie server in background
+print_warning "Starting Kelpie server..."
+cargo run -p kelpie-server --features fdb -- --fdb-cluster-file "$FDB_CLUSTER_FILE" > .kelpie.log 2>&1 &
+KELPIE_PID=$!
+echo $KELPIE_PID > .kelpie.pid
+
+# Wait for Kelpie to be ready
+echo "Waiting for Kelpie server to be ready..."
+for i in {1..30}; do
+    if curl -s http://localhost:8283/health > /dev/null 2>&1 || curl -s http://localhost:8283/v1/health > /dev/null 2>&1; then
+        print_success "Kelpie server ready on localhost:8283 (PID: $KELPIE_PID)"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        print_error "Kelpie server failed to start. Check kelpie/.kelpie.log for details"
+        tail -20 .kelpie.log
+        exit 1
+    fi
+    sleep 1
+done
 cd ..
 
 # 3. Link local packages and install dependencies
@@ -201,47 +232,12 @@ done
 
 cd ../..
 
-# 6. Start Letta UI (observability dashboard)
-echo ""
-echo "📊 Starting Letta UI..."
-cd letta-ui
-
-# Install dependencies if needed
-if [ ! -d "node_modules" ]; then
-    print_warning "Installing Letta UI dependencies..."
-    bun install
-fi
-
-# Kill any existing Letta UI server
-if [ -f ".ui.pid" ]; then
-    OLD_PID=$(cat .ui.pid)
-    if kill -0 $OLD_PID 2>/dev/null; then
-        print_warning "Stopping existing Letta UI (PID: $OLD_PID)..."
-        kill $OLD_PID 2>/dev/null || true
-        sleep 1
-    fi
-    rm -f .ui.pid
-fi
-
-# Start Letta UI in background on port 4000 (far from Next.js 3000+ range)
-LETTA_BASE_URL=http://localhost:8285 PORT=4000 bun run dev > .ui.log 2>&1 &
-UI_PID=$!
-echo $UI_PID > .ui.pid
-print_success "Letta UI starting (PID: $UI_PID)..."
-
-# Wait for Letta UI to be ready
-for i in {1..10}; do
-    if curl -s http://localhost:4000 > /dev/null 2>&1; then
-        print_success "Letta UI ready on localhost:4000"
-        break
-    fi
-    if [ $i -eq 10 ]; then
-        print_warning "Letta UI may still be starting..."
-    fi
-    sleep 0.5
-done
-
-cd ..
+# 6. Observability Dashboard (optional - commented out for now)
+# echo ""
+# echo "📊 Starting Observability Dashboard..."
+# Note: Kelpie uses tracing/metrics instead of a separate UI
+# To view metrics: curl http://localhost:8283/metrics
+# To enable OTLP tracing, set OTEL_EXPORTER_OTLP_ENDPOINT environment variable
 
 # 7. Start the web app
 echo ""
@@ -253,10 +249,12 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  🌌 Deep Sci-Fi is starting..."
 echo ""
 echo "  Web App:        http://localhost:3030"
-echo "  Letta UI:       http://localhost:4000"
+echo "  Kelpie Server:  http://localhost:8283"
 echo "  WebSocket:      ws://localhost:8284"
-echo "  Letta Server:   http://localhost:8285"
 echo "  PostgreSQL:     localhost:5433"
+echo ""
+echo "  Metrics:        http://localhost:8283/metrics"
+echo "  Kelpie logs:    tail -f kelpie/.kelpie.log"
 echo ""
 echo "  Press Ctrl+C to stop"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
