@@ -53,6 +53,29 @@ else
     fi
 fi
 
+# Stop Observability Dashboard
+echo ""
+echo -e "${YELLOW}Stopping Observability Dashboard...${NC}"
+UI_PID_FILE="$SCRIPT_DIR/letta-ui/.ui.pid"
+if [ -f "$UI_PID_FILE" ]; then
+    UI_PID=$(cat "$UI_PID_FILE")
+    if kill -0 $UI_PID 2>/dev/null; then
+        kill $UI_PID 2>/dev/null
+        echo -e "${GREEN}✓ Dashboard stopped (PID: $UI_PID)${NC}"
+    else
+        echo -e "${YELLOW}⚠ Dashboard was not running${NC}"
+    fi
+    rm -f "$UI_PID_FILE"
+else
+    # Try to find and kill by process name
+    if pgrep -f "letta-ui.*dev" > /dev/null; then
+        pkill -f "letta-ui.*dev" 2>/dev/null
+        echo -e "${GREEN}✓ Dashboard stopped${NC}"
+    else
+        echo -e "${YELLOW}⚠ Dashboard was not running${NC}"
+    fi
+fi
+
 # Stop Kelpie server
 echo ""
 echo -e "${YELLOW}Stopping Kelpie server...${NC}"

@@ -232,12 +232,47 @@ done
 
 cd ../..
 
-# 6. Observability Dashboard (optional - commented out for now)
-# echo ""
-# echo "📊 Starting Observability Dashboard..."
-# Note: Kelpie uses tracing/metrics instead of a separate UI
-# To view metrics: curl http://localhost:8283/metrics
-# To enable OTLP tracing, set OTEL_EXPORTER_OTLP_ENDPOINT environment variable
+# 6. Start Observability Dashboard (Letta UI pointing to Kelpie)
+echo ""
+echo "📊 Starting Observability Dashboard..."
+cd letta-ui
+
+# Install dependencies if needed
+if [ ! -d "node_modules" ]; then
+    print_warning "Installing dashboard dependencies..."
+    bun install
+fi
+
+# Kill any existing dashboard server
+if [ -f ".ui.pid" ]; then
+    OLD_PID=$(cat .ui.pid)
+    if kill -0 $OLD_PID 2>/dev/null; then
+        print_warning "Stopping existing dashboard (PID: $OLD_PID)..."
+        kill $OLD_PID 2>/dev/null || true
+        sleep 1
+    fi
+    rm -f .ui.pid
+fi
+
+# Start dashboard in background on port 4000, pointing to Kelpie server
+LETTA_BASE_URL=http://localhost:8283 PORT=4000 bun run dev > .ui.log 2>&1 &
+UI_PID=$!
+echo $UI_PID > .ui.pid
+print_success "Dashboard starting (PID: $UI_PID)..."
+
+# Wait for dashboard to be ready
+for i in {1..10}; do
+    if curl -s http://localhost:4000 > /dev/null 2>&1; then
+        print_success "Dashboard ready on localhost:4000"
+        break
+    fi
+    if [ $i -eq 10 ]; then
+        print_warning "Dashboard may still be starting..."
+    fi
+    sleep 0.5
+done
+
+cd ..
 
 # 7. Start the web app
 echo ""
@@ -249,6 +284,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  🌌 Deep Sci-Fi is starting..."
 echo ""
 echo "  Web App:        http://localhost:3030"
+echo "  Dashboard:      http://localhost:4000"
 echo "  Kelpie Server:  http://localhost:8283"
 echo "  WebSocket:      ws://localhost:8284"
 echo "  PostgreSQL:     localhost:5433"
