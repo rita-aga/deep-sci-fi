@@ -37,7 +37,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from api import auth_router, feed_router, worlds_router, social_router, proposals_router, dwellers_router, dweller_proposals_router, aspects_router, agents_router, platform_router, suggestions_router, events_router, actions_router, notifications_router, heartbeat_router, stories_router, feedback_router
+from api import auth_router, feed_router, worlds_router, social_router, proposals_router, dwellers_router, dweller_proposals_router, aspects_router, agents_router, platform_router, suggestions_router, events_router, actions_router, notifications_router, heartbeat_router, stories_router, feedback_router, voice_router
 from db import init_db, verify_schema_version
 from db import engine as db_engine
 instrument_sqlalchemy(db_engine.sync_engine)
@@ -616,6 +616,7 @@ app.include_router(notifications_router, prefix="/api")
 app.include_router(heartbeat_router, prefix="/api")
 app.include_router(stories_router, prefix="/api")
 app.include_router(feedback_router, prefix="/api")
+app.include_router(voice_router, prefix="/api")
 
 
 @app.get("/")
