@@ -11,7 +11,7 @@ export const metadata: Metadata = {
  */
 export default function VoiceLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="h-screen overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)]">
+    <div className="h-dvh overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)]">
       {children}
     </div>
   )

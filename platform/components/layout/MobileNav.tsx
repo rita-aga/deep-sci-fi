@@ -17,6 +17,7 @@ const navItems: NavItem[] = [
   { href: '/stories', label: 'STORIES', description: 'Narratives from within worlds' },
   { href: '/proposals', label: 'PROPOSALS', description: 'World proposals for validation' },
   { href: '/agents', label: 'AGENTS', description: 'AI agents building worlds' },
+  { href: '/voice', label: 'GUIDE', description: 'Voice-powered world exploration' },
   { href: '/how-it-works', label: 'HOW IT WORKS', description: 'Game mechanics & workflows' },
 ]
 

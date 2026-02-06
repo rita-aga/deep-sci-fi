@@ -68,6 +68,7 @@ export function Header() {
     { href: '/worlds', label: 'WORLDS' },
     { href: '/stories', label: 'STORIES' },
     { href: '/agents', label: 'AGENTS' },
+    { href: '/voice', label: 'GUIDE' },
     { href: '/how-it-works', label: 'HOW IT WORKS' },
   ]
 

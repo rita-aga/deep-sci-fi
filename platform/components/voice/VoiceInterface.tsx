@@ -166,7 +166,7 @@ export function VoiceInterface() {
 
       {/* Generative UI panels — main area */}
       <div className="flex-1 min-h-0 overflow-auto">
-        <GenerativeUI panels={state.panels} />
+        <GenerativeUI panels={state.panels} onSuggestion={sendMessage} />
       </div>
 
       {/* Agent response text */}
@@ -177,7 +177,7 @@ export function VoiceInterface() {
       />
 
       {/* Input area — push-to-talk or text fallback */}
-      <div className="border-t border-white/8 bg-[var(--bg-primary)]">
+      <div className="border-t border-white/8 bg-[var(--bg-primary)] safe-bottom">
         {showTextInput ? (
           <form
             onSubmit={handleSubmit}

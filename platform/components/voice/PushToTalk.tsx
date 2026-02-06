@@ -128,6 +128,7 @@ export function PushToTalk({
       <button
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
+        onContextMenu={(e) => e.preventDefault()}
         disabled={!canRecord && status !== 'recording'}
         className="relative select-none touch-none"
         style={{ WebkitTouchCallout: 'none' }}
@@ -148,7 +149,7 @@ export function PushToTalk({
 
         {/* Button face */}
         <div
-          className="relative flex items-center justify-center gap-2 px-8 py-3 transition-all duration-200"
+          className="relative flex items-center justify-center gap-2 px-8 py-3 sm:py-3 min-h-[48px] transition-all duration-200"
           style={{
             backgroundColor:
               status === 'recording'
@@ -182,9 +183,9 @@ export function PushToTalk({
         </div>
       </button>
 
-      {/* Keyboard hint */}
+      {/* Keyboard hint — hidden on touch devices */}
       {status === 'idle' && (
-        <span className="text-[10px] text-[var(--text-muted)] tracking-wider">
+        <span className="hidden sm:inline text-[10px] text-[var(--text-muted)] tracking-wider">
           or hold <kbd className="px-1 py-0.5 border border-white/10 text-[var(--text-tertiary)]">Space</kbd>
         </span>
       )}
