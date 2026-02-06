@@ -10,12 +10,20 @@ export async function POST(request: Request) {
     })
   }
 
+  const MAX_TTS_LENGTH = 2000
+
   const { text } = await request.json()
   if (!text || typeof text !== 'string') {
     return new Response(JSON.stringify({ error: 'Missing text field' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     })
+  }
+  if (text.length > MAX_TTS_LENGTH) {
+    return new Response(
+      JSON.stringify({ error: 'Text too long', max_length: MAX_TTS_LENGTH }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } }
+    )
   }
 
   const elResponse = await fetch(

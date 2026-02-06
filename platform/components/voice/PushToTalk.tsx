@@ -74,7 +74,8 @@ export function PushToTalk({
         e.repeat ||
         !canRecord ||
         (e.target as HTMLElement).tagName === 'INPUT' ||
-        (e.target as HTMLElement).tagName === 'TEXTAREA'
+        (e.target as HTMLElement).tagName === 'TEXTAREA' ||
+        (e.target as HTMLElement).isContentEditable
       )
         return
       e.preventDefault()

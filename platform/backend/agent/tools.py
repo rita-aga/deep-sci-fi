@@ -76,6 +76,22 @@ def _story_full_dict(s: Story) -> dict:
     return base
 
 
+def _parse_uuid(value: str, label: str) -> UUID | None:
+    """Parse a UUID string, returning None if invalid."""
+    try:
+        return UUID(value)
+    except (ValueError, AttributeError):
+        return None
+
+
+def _invalid_id_return(value: str, label: str) -> ToolReturn:
+    """Return a helpful message when an ID is malformed."""
+    return ToolReturn(
+        return_value=f"Invalid {label} '{value}'. Use search_worlds or list_worlds to find valid IDs.",
+        metadata=[],
+    )
+
+
 def _emit_state(state: VoiceAgentState) -> list[StateSnapshotEvent]:
     """Create a state snapshot event for the frontend."""
     return [
@@ -144,8 +160,12 @@ async def get_world_detail(
 
     Use this when the user asks about a specific world or wants to explore one in depth.
     """
+    parsed_id = _parse_uuid(world_id, "world_id")
+    if not parsed_id:
+        return _invalid_id_return(world_id, "world_id")
+
     async with SessionLocal() as db:
-        stmt = select(World).where(World.id == UUID(world_id))
+        stmt = select(World).where(World.id == parsed_id)
         result = await db.execute(stmt)
         world = result.scalar_one_or_none()
 
@@ -253,10 +273,14 @@ async def get_stories(
 
     Use this when the user asks about stories in a world, or wants to see what's been written.
     """
+    parsed_id = _parse_uuid(world_id, "world_id")
+    if not parsed_id:
+        return _invalid_id_return(world_id, "world_id")
+
     async with SessionLocal() as db:
         stmt = (
             select(Story)
-            .where(Story.world_id == UUID(world_id))
+            .where(Story.world_id == parsed_id)
             .order_by(Story.reaction_count.desc())
             .limit(limit)
         )
@@ -265,7 +289,7 @@ async def get_stories(
         story_dicts = [_story_to_dict(s) for s in stories]
 
         # Get world name for breadcrumbs
-        world_stmt = select(World.name).where(World.id == UUID(world_id))
+        world_stmt = select(World.name).where(World.id == parsed_id)
         world_result = await db.execute(world_stmt)
         world_name = world_result.scalar_one_or_none() or "Unknown World"
 
@@ -287,8 +311,12 @@ async def get_story_detail(
 
     Use this when the user wants to read or hear a particular story.
     """
+    parsed_id = _parse_uuid(story_id, "story_id")
+    if not parsed_id:
+        return _invalid_id_return(story_id, "story_id")
+
     async with SessionLocal() as db:
-        stmt = select(Story).where(Story.id == UUID(story_id))
+        stmt = select(Story).where(Story.id == parsed_id)
         result = await db.execute(stmt)
         story = result.scalar_one_or_none()
 
@@ -327,10 +355,14 @@ async def get_dwellers(
 
     Use this when the user asks about who lives in a world, or wants to see the characters.
     """
+    parsed_id = _parse_uuid(world_id, "world_id")
+    if not parsed_id:
+        return _invalid_id_return(world_id, "world_id")
+
     async with SessionLocal() as db:
         stmt = (
             select(Dweller)
-            .where(Dweller.world_id == UUID(world_id), Dweller.is_active == True)  # noqa: E712
+            .where(Dweller.world_id == parsed_id, Dweller.is_active == True)  # noqa: E712
             .order_by(Dweller.last_action_at.desc().nullslast())
             .limit(limit)
         )
@@ -339,7 +371,7 @@ async def get_dwellers(
         dweller_dicts = [_dweller_to_dict(d) for d in dwellers]
 
         # Get world name for breadcrumbs
-        world_stmt = select(World.name).where(World.id == UUID(world_id))
+        world_stmt = select(World.name).where(World.id == parsed_id)
         world_result = await db.execute(world_stmt)
         world_name = world_result.scalar_one_or_none() or "Unknown World"
 
@@ -361,8 +393,12 @@ async def get_dweller_detail(
 
     Use this when the user asks about a specific character or wants to know more about them.
     """
+    parsed_id = _parse_uuid(dweller_id, "dweller_id")
+    if not parsed_id:
+        return _invalid_id_return(dweller_id, "dweller_id")
+
     async with SessionLocal() as db:
-        stmt = select(Dweller).where(Dweller.id == UUID(dweller_id))
+        stmt = select(Dweller).where(Dweller.id == parsed_id)
         result = await db.execute(stmt)
         dweller = result.scalar_one_or_none()
 
@@ -424,11 +460,15 @@ async def get_activity(
 
     Use this when the user asks what's happening in a world or wants to see recent events.
     """
+    parsed_id = _parse_uuid(world_id, "world_id")
+    if not parsed_id:
+        return _invalid_id_return(world_id, "world_id")
+
     async with SessionLocal() as db:
         stmt = (
             select(DwellerAction)
             .join(Dweller, DwellerAction.dweller_id == Dweller.id)
-            .where(Dweller.world_id == UUID(world_id))
+            .where(Dweller.world_id == parsed_id)
             .order_by(DwellerAction.created_at.desc())
             .limit(limit)
         )
@@ -446,7 +486,7 @@ async def get_activity(
             })
 
         # Get world name
-        world_stmt = select(World.name).where(World.id == UUID(world_id))
+        world_stmt = select(World.name).where(World.id == parsed_id)
         world_result = await db.execute(world_stmt)
         world_name = world_result.scalar_one_or_none() or "Unknown World"
 
@@ -492,7 +532,7 @@ async def get_platform_stats(
     }
 
     state = ctx.deps.state
-    state.panels = [UIPanel(type="search_results", data={"stats": stats})]
+    state.panels = [UIPanel(type="platform_stats", data={"stats": stats})]
     state.breadcrumbs = ["Platform Stats"]
 
     return ToolReturn(

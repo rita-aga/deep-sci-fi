@@ -20,6 +20,7 @@ class UIPanel(BaseModel):
         "dweller_list",
         "causal_chain",
         "activity_feed",
+        "platform_stats",
         "search_results",
         "empty",
     ]

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 
 export interface UseTTSReturn {
   isSpeaking: boolean
@@ -14,6 +14,7 @@ export function useTTS(): UseTTSReturn {
   const [error, setError] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const urlRef = useRef<string | null>(null)
 
   const stop = useCallback(() => {
     abortRef.current?.abort()
@@ -24,7 +25,25 @@ export function useTTS(): UseTTSReturn {
       audioRef.current.src = ''
       audioRef.current = null
     }
+    if (urlRef.current) {
+      URL.revokeObjectURL(urlRef.current)
+      urlRef.current = null
+    }
     setIsSpeaking(false)
+  }, [])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.src = ''
+      }
+      if (urlRef.current) {
+        URL.revokeObjectURL(urlRef.current)
+      }
+    }
   }, [])
 
   const speak = useCallback(
@@ -55,19 +74,26 @@ export function useTTS(): UseTTSReturn {
         if (controller.signal.aborted) return
 
         const url = URL.createObjectURL(blob)
+        urlRef.current = url
         const audio = new Audio(url)
         audioRef.current = audio
 
         setIsSpeaking(true)
 
         audio.onended = () => {
-          URL.revokeObjectURL(url)
+          if (urlRef.current) {
+            URL.revokeObjectURL(urlRef.current)
+            urlRef.current = null
+          }
           audioRef.current = null
           setIsSpeaking(false)
         }
 
         audio.onerror = () => {
-          URL.revokeObjectURL(url)
+          if (urlRef.current) {
+            URL.revokeObjectURL(urlRef.current)
+            urlRef.current = null
+          }
           audioRef.current = null
           setIsSpeaking(false)
           setError('Audio playback failed')

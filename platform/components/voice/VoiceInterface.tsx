@@ -25,9 +25,12 @@ export function VoiceInterface() {
   const { isSpeaking, speak, stop: stopTTS, error: ttsError } = useTTS()
 
   const [pttStatus, setPttStatus] = useState<PTTStatus>('idle')
+  const [transcribeError, setTranscribeError] = useState<string | null>(null)
   const [showTextInput, setShowTextInput] = useState(false)
   const [input, setInput] = useState('')
   const prevStreamingRef = useRef(false)
+  const speakRef = useRef(speak)
+  speakRef.current = speak
 
   // Auto-speak when agent finishes streaming response
   useEffect(() => {
@@ -36,28 +39,28 @@ export function VoiceInterface() {
 
     // Transition from streaming → not streaming means response is complete
     if (wasStreaming && !isStreaming && responseText.trim()) {
-      speak(responseText.trim())
+      speakRef.current(responseText.trim())
     }
-  }, [isStreaming, responseText, speak])
+  }, [isStreaming, responseText])
 
   const handleRecordingComplete = useCallback(
     async (blob: Blob) => {
       setPttStatus('processing')
+      setTranscribeError(null)
       try {
         const res = await fetch('/api/voice/transcribe', {
           method: 'POST',
           body: blob,
         })
+        const data = await res.json().catch(() => null)
         if (!res.ok) {
-          const err = await res.json()
-          throw new Error(err.error || 'Transcription failed')
+          throw new Error(data?.error || 'Transcription failed')
         }
-        const { transcript } = await res.json()
-        if (transcript && transcript.trim()) {
-          sendMessage(transcript.trim())
+        if (data?.transcript?.trim()) {
+          sendMessage(data.transcript.trim())
         }
-      } catch {
-        // Transcription failed — fall back gracefully
+      } catch (err) {
+        setTranscribeError((err as Error).message || 'Transcription failed')
       } finally {
         setPttStatus('idle')
       }
@@ -109,7 +112,7 @@ export function VoiceInterface() {
     [input, isStreaming, sendMessage, isSpeaking, stopTTS]
   )
 
-  const combinedError = agentError || micError || ttsError
+  const combinedError = agentError || micError || ttsError || transcribeError
 
   return (
     <div className="flex flex-col h-full">

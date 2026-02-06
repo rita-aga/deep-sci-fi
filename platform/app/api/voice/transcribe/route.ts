@@ -10,11 +10,19 @@ export async function POST(request: Request) {
     )
   }
 
+  const MAX_AUDIO_SIZE = 10 * 1024 * 1024 // 10MB
+
   const audioBlob = await request.blob()
   if (audioBlob.size === 0) {
     return NextResponse.json(
       { error: 'Empty audio data' },
       { status: 400 }
+    )
+  }
+  if (audioBlob.size > MAX_AUDIO_SIZE) {
+    return NextResponse.json(
+      { error: 'Audio too large', max_bytes: MAX_AUDIO_SIZE },
+      { status: 413 }
     )
   }
 

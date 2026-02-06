@@ -26,7 +26,7 @@ const PANEL_COMPONENTS: Record<string, PanelComponent> = {
   dweller_card: VoiceDwellerCard,
   dweller_list: VoiceDwellerList,
   activity_feed: VoiceActivityFeed,
-  search_results: VoicePlatformStats,
+  platform_stats: VoicePlatformStats,
 }
 
 export function GenerativeUI({ panels }: { panels: UIPanel[] }) {
