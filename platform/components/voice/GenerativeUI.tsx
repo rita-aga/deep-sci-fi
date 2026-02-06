@@ -6,6 +6,12 @@ import type { UIPanel } from '@/hooks/useVoiceAgent'
 import { VoiceWorldCard } from './panels/VoiceWorldCard'
 import { VoiceWorldList } from './panels/VoiceWorldList'
 import { VoiceCausalChain } from './panels/VoiceCausalChain'
+import { VoiceStoryList } from './panels/VoiceStoryList'
+import { VoiceStoryFull } from './panels/VoiceStoryFull'
+import { VoiceDwellerCard } from './panels/VoiceDwellerCard'
+import { VoiceDwellerList } from './panels/VoiceDwellerList'
+import { VoiceActivityFeed } from './panels/VoiceActivityFeed'
+import { VoicePlatformStats } from './panels/VoicePlatformStats'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type PanelComponent = React.ComponentType<{ data: any }>
@@ -15,6 +21,12 @@ const PANEL_COMPONENTS: Record<string, PanelComponent> = {
   world_card: VoiceWorldCard,
   world_list: VoiceWorldList,
   causal_chain: VoiceCausalChain,
+  story_list: VoiceStoryList,
+  story_full: VoiceStoryFull,
+  dweller_card: VoiceDwellerCard,
+  dweller_list: VoiceDwellerList,
+  activity_feed: VoiceActivityFeed,
+  search_results: VoicePlatformStats,
 }
 
 export function GenerativeUI({ panels }: { panels: UIPanel[] }) {

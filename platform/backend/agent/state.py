@@ -13,6 +13,7 @@ class UIPanel(BaseModel):
     type: Literal[
         "world_card",
         "world_list",
+        "story_list",
         "story_preview",
         "story_full",
         "dweller_card",

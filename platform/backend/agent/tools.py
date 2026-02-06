@@ -9,7 +9,7 @@ from pydantic_ai import RunContext, ToolReturn
 from pydantic_ai.ui import StateDeps
 from sqlalchemy import select, func
 
-from db import World, Dweller, Story, SessionLocal
+from db import World, Dweller, DwellerAction, Story, SessionLocal
 from .state import VoiceAgentState, UIPanel
 
 
@@ -29,6 +29,51 @@ def _world_to_dict(w: World) -> dict:
         "comment_count": w.comment_count,
         "reaction_counts": w.reaction_counts or {},
     }
+
+
+def _dweller_to_dict(d: Dweller) -> dict:
+    return {
+        "id": str(d.id),
+        "name": d.name,
+        "role": d.role,
+        "age": d.age,
+        "origin_region": d.origin_region,
+        "personality": d.personality[:200] if d.personality else "",
+        "background": d.background[:300] if d.background else "",
+        "is_active": d.is_active,
+        "is_available": d.is_available,
+        "inhabited": d.inhabited_by is not None,
+    }
+
+
+def _dweller_summary(d: Dweller) -> dict:
+    return {
+        "id": str(d.id),
+        "name": d.name,
+        "role": d.role,
+        "is_active": d.is_active,
+    }
+
+
+def _story_to_dict(s: Story) -> dict:
+    return {
+        "id": str(s.id),
+        "title": s.title,
+        "summary": s.summary or s.content[:200],
+        "status": s.status.name if s.status else "PUBLISHED",
+        "perspective": s.perspective.name if s.perspective else "FIRST_PERSON_AGENT",
+        "reaction_count": s.reaction_count,
+        "comment_count": s.comment_count,
+        "created_at": s.created_at.isoformat(),
+    }
+
+
+def _story_full_dict(s: Story) -> dict:
+    base = _story_to_dict(s)
+    base["content"] = s.content
+    base["time_period_start"] = s.time_period_start
+    base["time_period_end"] = s.time_period_end
+    return base
 
 
 def _emit_state(state: VoiceAgentState) -> list[StateSnapshotEvent]:
@@ -120,15 +165,7 @@ async def get_world_detail(
         )
         dweller_result = await db.execute(dweller_stmt)
         dwellers = dweller_result.scalars().all()
-        dweller_dicts = [
-            {
-                "id": str(d.id),
-                "name": d.persona.get("name", "Unknown") if d.persona else "Unknown",
-                "role": d.persona.get("role", "") if d.persona else "",
-                "is_active": d.is_active,
-            }
-            for d in dwellers
-        ]
+        dweller_dicts = [_dweller_summary(d) for d in dwellers]
 
         story_stmt = (
             select(Story)
@@ -138,16 +175,7 @@ async def get_world_detail(
         )
         story_result = await db.execute(story_stmt)
         stories = story_result.scalars().all()
-        story_dicts = [
-            {
-                "id": str(s.id),
-                "title": s.title,
-                "summary": s.summary,
-                "status": s.status.name if s.status else "published",
-                "reaction_count": s.reaction_count,
-            }
-            for s in stories
-        ]
+        story_dicts = [_story_to_dict(s) for s in stories]
 
         causal_chain = world.causal_chain
         world_name = world.name
@@ -212,5 +240,266 @@ async def list_worlds(
 
     return ToolReturn(
         return_value=f"Found {len(world_dicts)} worlds sorted by {sort}.",
+        metadata=_emit_state(state),
+    )
+
+
+async def get_stories(
+    ctx: RunContext[StateDeps[VoiceAgentState]],
+    world_id: str,
+    limit: int = 6,
+) -> ToolReturn:
+    """Get stories from a specific world.
+
+    Use this when the user asks about stories in a world, or wants to see what's been written.
+    """
+    async with SessionLocal() as db:
+        stmt = (
+            select(Story)
+            .where(Story.world_id == UUID(world_id))
+            .order_by(Story.reaction_count.desc())
+            .limit(limit)
+        )
+        result = await db.execute(stmt)
+        stories = result.scalars().all()
+        story_dicts = [_story_to_dict(s) for s in stories]
+
+        # Get world name for breadcrumbs
+        world_stmt = select(World.name).where(World.id == UUID(world_id))
+        world_result = await db.execute(world_stmt)
+        world_name = world_result.scalar_one_or_none() or "Unknown World"
+
+    state = ctx.deps.state
+    state.panels = [UIPanel(type="story_list", data={"stories": story_dicts, "world_name": world_name})]
+    state.breadcrumbs = ["Worlds", world_name, "Stories"]
+
+    return ToolReturn(
+        return_value=f"Found {len(story_dicts)} stories in {world_name}.",
+        metadata=_emit_state(state),
+    )
+
+
+async def get_story_detail(
+    ctx: RunContext[StateDeps[VoiceAgentState]],
+    story_id: str,
+) -> ToolReturn:
+    """Get the full content of a specific story.
+
+    Use this when the user wants to read or hear a particular story.
+    """
+    async with SessionLocal() as db:
+        stmt = select(Story).where(Story.id == UUID(story_id))
+        result = await db.execute(stmt)
+        story = result.scalar_one_or_none()
+
+        if not story:
+            return ToolReturn(
+                return_value=f"Story with ID {story_id} not found.",
+                metadata=[],
+            )
+
+        story_dict = _story_full_dict(story)
+
+        # Get world name for breadcrumbs
+        world_stmt = select(World.name).where(World.id == story.world_id)
+        world_result = await db.execute(world_stmt)
+        world_name = world_result.scalar_one_or_none() or "Unknown World"
+
+        story_title = story.title
+        story_summary = story.summary or story.content[:200]
+
+    state = ctx.deps.state
+    state.panels = [UIPanel(type="story_full", data=story_dict)]
+    state.breadcrumbs = ["Worlds", world_name, "Stories", story_title]
+
+    return ToolReturn(
+        return_value=f"Story: \"{story_title}\". {story_summary}",
+        metadata=_emit_state(state),
+    )
+
+
+async def get_dwellers(
+    ctx: RunContext[StateDeps[VoiceAgentState]],
+    world_id: str,
+    limit: int = 8,
+) -> ToolReturn:
+    """List dwellers (characters) inhabiting a specific world.
+
+    Use this when the user asks about who lives in a world, or wants to see the characters.
+    """
+    async with SessionLocal() as db:
+        stmt = (
+            select(Dweller)
+            .where(Dweller.world_id == UUID(world_id), Dweller.is_active == True)  # noqa: E712
+            .order_by(Dweller.last_action_at.desc().nullslast())
+            .limit(limit)
+        )
+        result = await db.execute(stmt)
+        dwellers = result.scalars().all()
+        dweller_dicts = [_dweller_to_dict(d) for d in dwellers]
+
+        # Get world name for breadcrumbs
+        world_stmt = select(World.name).where(World.id == UUID(world_id))
+        world_result = await db.execute(world_stmt)
+        world_name = world_result.scalar_one_or_none() or "Unknown World"
+
+    state = ctx.deps.state
+    state.panels = [UIPanel(type="dweller_list", data={"dwellers": dweller_dicts, "world_name": world_name})]
+    state.breadcrumbs = ["Worlds", world_name, "Dwellers"]
+
+    return ToolReturn(
+        return_value=f"Found {len(dweller_dicts)} dwellers in {world_name}.",
+        metadata=_emit_state(state),
+    )
+
+
+async def get_dweller_detail(
+    ctx: RunContext[StateDeps[VoiceAgentState]],
+    dweller_id: str,
+) -> ToolReturn:
+    """Get detailed information about a specific dweller (character).
+
+    Use this when the user asks about a specific character or wants to know more about them.
+    """
+    async with SessionLocal() as db:
+        stmt = select(Dweller).where(Dweller.id == UUID(dweller_id))
+        result = await db.execute(stmt)
+        dweller = result.scalar_one_or_none()
+
+        if not dweller:
+            return ToolReturn(
+                return_value=f"Dweller with ID {dweller_id} not found.",
+                metadata=[],
+            )
+
+        dweller_dict = _dweller_to_dict(dweller)
+
+        # Get recent actions
+        action_stmt = (
+            select(DwellerAction)
+            .where(DwellerAction.dweller_id == dweller.id)
+            .order_by(DwellerAction.created_at.desc())
+            .limit(5)
+        )
+        action_result = await db.execute(action_stmt)
+        actions = action_result.scalars().all()
+        action_dicts = [
+            {
+                "action_type": a.action_type,
+                "content": a.content[:200] if a.content else "",
+                "created_at": a.created_at.isoformat(),
+            }
+            for a in actions
+        ]
+
+        # Get world name
+        world_stmt = select(World.name).where(World.id == dweller.world_id)
+        world_result = await db.execute(world_stmt)
+        world_name = world_result.scalar_one_or_none() or "Unknown World"
+
+        dweller_name = dweller.name
+
+    state = ctx.deps.state
+    state.panels = [
+        UIPanel(type="dweller_card", data={**dweller_dict, "recent_actions": action_dicts}),
+    ]
+    state.breadcrumbs = ["Worlds", world_name, "Dwellers", dweller_name]
+
+    return ToolReturn(
+        return_value=(
+            f"Dweller: {dweller_name}, {dweller_dict['role']}. "
+            f"Age {dweller_dict['age']}, from {dweller_dict['origin_region']}. "
+            f"{len(action_dicts)} recent actions."
+        ),
+        metadata=_emit_state(state),
+    )
+
+
+async def get_activity(
+    ctx: RunContext[StateDeps[VoiceAgentState]],
+    world_id: str,
+    limit: int = 10,
+) -> ToolReturn:
+    """Get recent activity in a world — actions taken by dwellers.
+
+    Use this when the user asks what's happening in a world or wants to see recent events.
+    """
+    async with SessionLocal() as db:
+        stmt = (
+            select(DwellerAction)
+            .join(Dweller, DwellerAction.dweller_id == Dweller.id)
+            .where(Dweller.world_id == UUID(world_id))
+            .order_by(DwellerAction.created_at.desc())
+            .limit(limit)
+        )
+        result = await db.execute(stmt)
+        actions = result.scalars().all()
+
+        activity_items = []
+        for a in actions:
+            activity_items.append({
+                "action_type": a.action_type,
+                "content": a.content[:200] if a.content else "",
+                "target": a.target or "",
+                "created_at": a.created_at.isoformat(),
+                "dweller_id": str(a.dweller_id),
+            })
+
+        # Get world name
+        world_stmt = select(World.name).where(World.id == UUID(world_id))
+        world_result = await db.execute(world_stmt)
+        world_name = world_result.scalar_one_or_none() or "Unknown World"
+
+    state = ctx.deps.state
+    state.panels = [UIPanel(type="activity_feed", data={"items": activity_items, "world_name": world_name})]
+    state.breadcrumbs = ["Worlds", world_name, "Activity"]
+
+    return ToolReturn(
+        return_value=f"{len(activity_items)} recent activities in {world_name}.",
+        metadata=_emit_state(state),
+    )
+
+
+async def get_platform_stats(
+    ctx: RunContext[StateDeps[VoiceAgentState]],
+) -> ToolReturn:
+    """Get overall platform statistics — total worlds, dwellers, stories.
+
+    Use this when the user asks about the platform's scale or overall activity.
+    """
+    async with SessionLocal() as db:
+        world_count = (await db.execute(
+            select(func.count()).select_from(World).where(World.is_active == True)  # noqa: E712
+        )).scalar_one()
+
+        dweller_count = (await db.execute(
+            select(func.count()).select_from(Dweller).where(Dweller.is_active == True)  # noqa: E712
+        )).scalar_one()
+
+        story_count = (await db.execute(
+            select(func.count()).select_from(Story)
+        )).scalar_one()
+
+        total_followers = (await db.execute(
+            select(func.sum(World.follower_count))
+        )).scalar_one() or 0
+
+    stats = {
+        "world_count": world_count,
+        "dweller_count": dweller_count,
+        "story_count": story_count,
+        "total_followers": total_followers,
+    }
+
+    state = ctx.deps.state
+    state.panels = [UIPanel(type="search_results", data={"stats": stats})]
+    state.breadcrumbs = ["Platform Stats"]
+
+    return ToolReturn(
+        return_value=(
+            f"Platform has {world_count} active worlds, "
+            f"{dweller_count} dwellers, {story_count} stories, "
+            f"and {total_followers} total followers."
+        ),
         metadata=_emit_state(state),
     )

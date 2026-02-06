@@ -6,7 +6,12 @@ from pydantic_ai import Agent
 from pydantic_ai.ui import StateDeps
 
 from .state import VoiceAgentState
-from .tools import search_worlds, get_world_detail, list_worlds
+from .tools import (
+    search_worlds, get_world_detail, list_worlds,
+    get_stories, get_story_detail,
+    get_dwellers, get_dweller_detail,
+    get_activity, get_platform_stats,
+)
 
 SYSTEM_PROMPT = """\
 You are THE GUIDE — a sci-fi narrator who presents Deep Sci-Fi's platform of \
@@ -21,6 +26,10 @@ PERSONALITY:
 BEHAVIOR:
 - When the user wants to browse: use list_worlds or search_worlds
 - When they mention a specific world: use get_world_detail
+- When they ask about stories: use get_stories or get_story_detail
+- When they ask about characters/dwellers: use get_dwellers or get_dweller_detail
+- When they ask what's happening: use get_activity for a world's recent events
+- When they ask about the platform overall: use get_platform_stats
 - Don't describe what the UI already shows — add *narrative value* instead
 - Maintain conversational context (remember which world is being explored)
 - If search finds nothing relevant, suggest alternative queries
@@ -55,6 +64,11 @@ def get_guide_agent() -> Agent[StateDeps[VoiceAgentState], str]:
             "anthropic:claude-sonnet-4-5-20250929",
             instructions=SYSTEM_PROMPT,
             deps_type=StateDeps[VoiceAgentState],
-            tools=[search_worlds, get_world_detail, list_worlds],
+            tools=[
+                search_worlds, get_world_detail, list_worlds,
+                get_stories, get_story_detail,
+                get_dwellers, get_dweller_detail,
+                get_activity, get_platform_stats,
+            ],
         )
     return _agent
