@@ -142,7 +142,10 @@ export function useVoiceAgent() {
                   break
                 }
                 case 'STATE_DELTA': {
-                  // Apply JSON patch delta (simplified — full delta support can be added later)
+                  // JSON patch deltas not yet implemented — log so we notice if triggered
+                  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+                    console.warn('[useVoiceAgent] STATE_DELTA received but not implemented — state may be stale')
+                  }
                   break
                 }
                 case 'TOOL_CALL_START': {

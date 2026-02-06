@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
-
 from pydantic_ai import Agent
 from pydantic_ai.ui import StateDeps
 
@@ -44,13 +42,19 @@ where engineered organisms have rewritten the food chain. Three dwellers navigat
 consequences — and two stories have already emerged from their experiences."
 """
 
+# Module-level singleton — created on first call, reused thereafter.
+# Double-init on concurrent cold start is harmless (Agent is stateless once created).
+_agent: Agent[StateDeps[VoiceAgentState], str] | None = None
 
-@lru_cache(maxsize=1)
+
 def get_guide_agent() -> Agent[StateDeps[VoiceAgentState], str]:
     """Lazy-create the guide agent (deferred so import doesn't require ANTHROPIC_API_KEY)."""
-    return Agent(
-        "anthropic:claude-sonnet-4-5-20250929",
-        instructions=SYSTEM_PROMPT,
-        deps_type=StateDeps[VoiceAgentState],
-        tools=[search_worlds, get_world_detail, list_worlds],
-    )
+    global _agent
+    if _agent is None:
+        _agent = Agent(
+            "anthropic:claude-sonnet-4-5-20250929",
+            instructions=SYSTEM_PROMPT,
+            deps_type=StateDeps[VoiceAgentState],
+            tools=[search_worlds, get_world_detail, list_worlds],
+        )
+    return _agent

@@ -8,17 +8,9 @@ from ag_ui.core import EventType, StateSnapshotEvent
 from pydantic_ai import RunContext, ToolReturn
 from pydantic_ai.ui import StateDeps
 from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from db import World, Dweller, Story
+from db import World, Dweller, Story, SessionLocal
 from .state import VoiceAgentState, UIPanel
-
-
-async def _get_db() -> AsyncSession:
-    """Get a fresh async database session."""
-    from db import SessionLocal
-
-    return SessionLocal()
 
 
 def _world_to_dict(w: World) -> dict:
@@ -26,7 +18,7 @@ def _world_to_dict(w: World) -> dict:
         "id": str(w.id),
         "name": w.name,
         "premise": w.premise,
-        "canon_summary": w.canon_summary or w.premise,
+        "canon_summary": w.canon_summary if w.canon_summary else w.premise,
         "year_setting": w.year_setting,
         "causal_chain": w.causal_chain,
         "scientific_basis": w.scientific_basis,
@@ -58,8 +50,7 @@ async def search_worlds(
 
     Use this when the user asks to browse, discover, or find worlds.
     """
-    db = await _get_db()
-    try:
+    async with SessionLocal() as db:
         # Text search on name and premise
         search_filter = func.lower(World.name).contains(query.lower()) | func.lower(
             World.premise
@@ -87,19 +78,17 @@ async def search_worlds(
 
         world_dicts = [_world_to_dict(w) for w in worlds]
 
-        # Update state with world list panel
-        state = ctx.deps.state
-        state.panels = [UIPanel(type="world_list", data={"worlds": world_dicts})]
-        state.breadcrumbs = ["Worlds"]
-        state.current_world_id = None
-        state.current_world_name = None
+    # Update state with world list panel
+    state = ctx.deps.state
+    state.panels = [UIPanel(type="world_list", data={"worlds": world_dicts})]
+    state.breadcrumbs = ["Worlds"]
+    state.current_world_id = None
+    state.current_world_name = None
 
-        return ToolReturn(
-            return_value=f"Found {len(world_dicts)} worlds matching '{query}'.",
-            metadata=_emit_state(state),
-        )
-    finally:
-        await db.close()
+    return ToolReturn(
+        return_value=f"Found {len(world_dicts)} worlds matching '{query}'.",
+        metadata=_emit_state(state),
+    )
 
 
 async def get_world_detail(
@@ -110,8 +99,7 @@ async def get_world_detail(
 
     Use this when the user asks about a specific world or wants to explore one in depth.
     """
-    db = await _get_db()
-    try:
+    async with SessionLocal() as db:
         stmt = select(World).where(World.id == UUID(world_id))
         result = await db.execute(stmt)
         world = result.scalar_one_or_none()
@@ -124,7 +112,7 @@ async def get_world_detail(
 
         world_dict = _world_to_dict(world)
 
-        # Also fetch dweller count and recent stories
+        # Also fetch dwellers and recent stories
         dweller_stmt = (
             select(Dweller)
             .where(Dweller.world_id == world.id, Dweller.is_active == True)  # noqa: E712
@@ -161,28 +149,33 @@ async def get_world_detail(
             for s in stories
         ]
 
-        # Update state
-        state = ctx.deps.state
-        state.panels = [
-            UIPanel(type="world_card", data={**world_dict, "dwellers": dweller_dicts, "stories": story_dicts}),
-        ]
-        if world.causal_chain:
-            state.panels.append(UIPanel(type="causal_chain", data={"events": world.causal_chain}))
+        causal_chain = world.causal_chain
+        world_name = world.name
+        world_year = world.year_setting
+        world_dweller_count = world.dweller_count
+        world_premise = world.premise[:200]
+        world_id_str = str(world.id)
 
-        state.current_world_id = str(world.id)
-        state.current_world_name = world.name
-        state.breadcrumbs = ["Worlds", world.name]
+    # Update state (outside the session context)
+    state = ctx.deps.state
+    state.panels = [
+        UIPanel(type="world_card", data={**world_dict, "dwellers": dweller_dicts, "stories": story_dicts}),
+    ]
+    if causal_chain:
+        state.panels.append(UIPanel(type="causal_chain", data={"events": causal_chain}))
 
-        return ToolReturn(
-            return_value=(
-                f"World: {world.name} (set in {world.year_setting}). "
-                f"{world.dweller_count} dwellers, {len(stories)} recent stories. "
-                f"Premise: {world.premise[:200]}"
-            ),
-            metadata=_emit_state(state),
-        )
-    finally:
-        await db.close()
+    state.current_world_id = world_id_str
+    state.current_world_name = world_name
+    state.breadcrumbs = ["Worlds", world_name]
+
+    return ToolReturn(
+        return_value=(
+            f"World: {world_name} (set in {world_year}). "
+            f"{world_dweller_count} dwellers, {len(story_dicts)} recent stories. "
+            f"Premise: {world_premise}"
+        ),
+        metadata=_emit_state(state),
+    )
 
 
 async def list_worlds(
@@ -195,8 +188,7 @@ async def list_worlds(
     Use this when the user asks to see all worlds or browse what's available.
     sort can be: 'popular', 'recent', or 'active'.
     """
-    db = await _get_db()
-    try:
+    async with SessionLocal() as db:
         stmt = select(World).where(World.is_active == True)  # noqa: E712
 
         if sort == "popular":
@@ -212,15 +204,13 @@ async def list_worlds(
 
         world_dicts = [_world_to_dict(w) for w in worlds]
 
-        state = ctx.deps.state
-        state.panels = [UIPanel(type="world_list", data={"worlds": world_dicts})]
-        state.breadcrumbs = ["Worlds"]
-        state.current_world_id = None
-        state.current_world_name = None
+    state = ctx.deps.state
+    state.panels = [UIPanel(type="world_list", data={"worlds": world_dicts})]
+    state.breadcrumbs = ["Worlds"]
+    state.current_world_id = None
+    state.current_world_name = None
 
-        return ToolReturn(
-            return_value=f"Found {len(world_dicts)} worlds sorted by {sort}.",
-            metadata=_emit_state(state),
-        )
-    finally:
-        await db.close()
+    return ToolReturn(
+        return_value=f"Found {len(world_dicts)} worlds sorted by {sort}.",
+        metadata=_emit_state(state),
+    )
