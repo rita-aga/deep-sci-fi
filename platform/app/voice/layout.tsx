@@ -6,12 +6,13 @@ export const metadata: Metadata = {
 }
 
 /**
- * Immersive layout for the voice page — no header, footer, or nav.
- * Full viewport height for the voice interface.
+ * Immersive layout for the voice page.
+ * Uses fixed positioning to overlay the root layout chrome
+ * (Header, Footer, BottomNav) for a full-screen experience.
  */
 export default function VoiceLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="h-dvh overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)]">
+    <div className="fixed inset-0 z-[100] h-dvh overflow-hidden nebula-bg crt-scanlines text-[var(--text-primary)]">
       {children}
     </div>
   )

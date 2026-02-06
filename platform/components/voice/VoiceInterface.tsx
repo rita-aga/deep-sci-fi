@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef, type FormEvent } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useVoiceAgent } from '@/hooks/useVoiceAgent'
 import { useMediaRecorder } from '@/hooks/useMediaRecorder'
 import { useTTS } from '@/hooks/useTTS'
 import { GenerativeUI } from './GenerativeUI'
 import { ResponsePanel } from './ResponsePanel'
 import { VoiceStatus } from './VoiceStatus'
-import { PushToTalk } from './PushToTalk'
+import { VoiceInputBar } from './VoiceInputBar'
 
 type PTTStatus = 'idle' | 'recording' | 'processing' | 'speaking'
 
@@ -26,18 +26,15 @@ export function VoiceInterface() {
 
   const [pttStatus, setPttStatus] = useState<PTTStatus>('idle')
   const [transcribeError, setTranscribeError] = useState<string | null>(null)
-  const [showTextInput, setShowTextInput] = useState(false)
-  const [input, setInput] = useState('')
   const prevStreamingRef = useRef(false)
   const speakRef = useRef(speak)
   speakRef.current = speak
 
-  // Auto-speak when agent finishes streaming response
+  // Auto-speak when agent finishes streaming
   useEffect(() => {
     const wasStreaming = prevStreamingRef.current
     prevStreamingRef.current = isStreaming
 
-    // Transition from streaming → not streaming means response is complete
     if (wasStreaming && !isStreaming && responseText.trim()) {
       speakRef.current(responseText.trim())
     }
@@ -77,10 +74,7 @@ export function VoiceInterface() {
   } = useMediaRecorder(handleRecordingComplete)
 
   const handleStartRecording = useCallback(() => {
-    // Interrupt TTS if agent is speaking
-    if (isSpeaking) {
-      stopTTS()
-    }
+    if (isSpeaking) stopTTS()
     setPttStatus('recording')
     startRecording()
   }, [startRecording, isSpeaking, stopTTS])
@@ -89,7 +83,15 @@ export function VoiceInterface() {
     stopRecording()
   }, [stopRecording])
 
-  // Derive the effective PTT status
+  const handleSendMessage = useCallback(
+    (text: string) => {
+      if (isSpeaking) stopTTS()
+      sendMessage(text)
+    },
+    [sendMessage, isSpeaking, stopTTS]
+  )
+
+  // Derive effective status
   const effectiveStatus: PTTStatus = isRecording
     ? 'recording'
     : pttStatus === 'processing'
@@ -100,114 +102,72 @@ export function VoiceInterface() {
           ? 'processing'
           : 'idle'
 
-  const handleSubmit = useCallback(
-    (e: FormEvent) => {
-      e.preventDefault()
-      const text = input.trim()
-      if (!text || isStreaming) return
-      setInput('')
-      if (isSpeaking) stopTTS()
-      sendMessage(text)
-    },
-    [input, isStreaming, sendMessage, isSpeaking, stopTTS]
-  )
-
   const combinedError = agentError || micError || ttsError || transcribeError
 
   return (
     <div className="flex flex-col h-full">
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-white/6">
+      {/* ── Top bar ── */}
+      <header className="glass flex items-center justify-between px-4 sm:px-6 py-3 border-b border-white/8 shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-[var(--neon-cyan)] text-sm font-semibold tracking-widest">
+          <span className="font-display text-sm text-neon-cyan tracking-widest text-glow">
             DSF
           </span>
-          <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">
+          <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-[0.12em]">
             Voice Guide
           </span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {state.status === 'thinking' && (
-            <span className="text-[10px] text-[var(--neon-purple)] uppercase tracking-wider flex items-center gap-1.5">
-              <span className="w-1 h-1 bg-[var(--neon-purple)] animate-pulse" />
+            <span className="text-[10px] text-neon-purple uppercase tracking-wider flex items-center gap-1.5">
+              <span className="w-1 h-1 bg-neon-purple animate-pulse" />
               Thinking
             </span>
           )}
           {isSpeaking && (
             <button
               onClick={stopTTS}
-              className="text-[10px] text-[var(--neon-purple)] hover:text-[var(--neon-purple-bright)] transition-colors px-2 py-1 border border-[var(--neon-purple)]/20"
+              className="text-[10px] text-neon-purple hover:text-neon-purple-bright transition-all px-2 py-1 border border-neon-purple/20 hover:border-neon-purple/40 hover:shadow-neon-purple"
             >
               Stop
             </button>
           )}
-          <button
-            onClick={() => setShowTextInput(!showTextInput)}
-            className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-tertiary)] transition-colors px-2 py-1 border border-white/6"
-            title="Toggle text input"
-          >
-            {showTextInput ? 'Voice' : 'Text'}
-          </button>
           <a
             href="/"
-            className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors px-2 py-1 border border-white/8"
+            className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-all px-2 py-1 border border-white/8 hover:border-white/15"
           >
             Exit
           </a>
         </div>
-      </div>
+      </header>
 
-      {/* Status / breadcrumbs */}
+      {/* ── Breadcrumbs / errors ── */}
       <VoiceStatus
         error={combinedError}
         breadcrumbs={state.breadcrumbs}
         onDismissError={reset}
       />
 
-      {/* Generative UI panels — main area */}
+      {/* ── Main content — panels ── */}
       <div className="flex-1 min-h-0 overflow-auto">
-        <GenerativeUI panels={state.panels} onSuggestion={sendMessage} />
+        <GenerativeUI panels={state.panels} onSuggestion={handleSendMessage} />
       </div>
 
-      {/* Agent response text */}
+      {/* ── Agent response ── */}
       <ResponsePanel
         text={responseText}
         isStreaming={isStreaming}
         isToolRunning={isToolRunning}
       />
 
-      {/* Input area — push-to-talk or text fallback */}
-      <div className="border-t border-white/8 bg-[var(--bg-primary)] safe-bottom">
-        {showTextInput ? (
-          <form
-            onSubmit={handleSubmit}
-            className="flex items-center gap-3 px-6 py-4"
-          >
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about worlds..."
-              disabled={isStreaming}
-              className="flex-1 bg-[var(--bg-tertiary)] border border-white/10 px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]/50 focus:outline-none focus:border-[var(--neon-cyan)]/40 transition-colors disabled:opacity-50"
-            />
-            <button
-              type="submit"
-              disabled={isStreaming || !input.trim()}
-              className="px-5 py-2.5 text-xs uppercase tracking-wider bg-[var(--neon-cyan)]/10 border border-[var(--neon-cyan)]/30 text-[var(--neon-cyan)] hover:bg-[var(--neon-cyan)]/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              {isStreaming ? 'Streaming...' : 'Send'}
-            </button>
-          </form>
-        ) : (
-          <PushToTalk
-            status={effectiveStatus}
-            analyserNode={analyserNode}
-            onStartRecording={handleStartRecording}
-            onStopRecording={handleStopRecording}
-            disabled={isStreaming}
-          />
-        )}
+      {/* ── Unified input bar ── */}
+      <div className="glass border-t border-white/8 safe-bottom shrink-0">
+        <VoiceInputBar
+          status={effectiveStatus}
+          analyserNode={analyserNode}
+          onStartRecording={handleStartRecording}
+          onStopRecording={handleStopRecording}
+          onSendMessage={handleSendMessage}
+        />
       </div>
     </div>
   )
