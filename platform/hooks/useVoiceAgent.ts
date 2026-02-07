@@ -56,6 +56,7 @@ export function useVoiceAgent() {
   const [isToolRunning, setIsToolRunning] = useState(false)
   const messagesRef = useRef<Message[]>([])
   const abortRef = useRef<AbortController | null>(null)
+  const threadIdRef = useRef(crypto.randomUUID())
 
   const sendMessage = useCallback(async (text: string) => {
     // Abort any existing stream
@@ -84,8 +85,12 @@ export function useVoiceAgent() {
             role: m.role,
             content: m.content,
           })),
+          threadId: threadIdRef.current,
           run_id: crypto.randomUUID(),
           state: state,
+          tools: [],
+          context: [],
+          forwardedProps: {},
         }),
         signal: controller.signal,
       })
