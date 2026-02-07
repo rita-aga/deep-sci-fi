@@ -146,8 +146,12 @@ async def search_worlds(
     state.current_world_id = None
     state.current_world_name = None
 
+    # Build summary with names + IDs so the LLM can make follow-up calls
+    world_lines = [f"- {w['name']} (id: {w['id']})" for w in world_dicts]
+    world_summary = "\n".join(world_lines)
+
     return ToolReturn(
-        return_value=f"Found {len(world_dicts)} worlds matching '{query}'.",
+        return_value=f"Found {len(world_dicts)} worlds matching '{query}':\n{world_summary}",
         metadata=_emit_state(state),
     )
 
@@ -258,8 +262,12 @@ async def list_worlds(
     state.current_world_id = None
     state.current_world_name = None
 
+    # Build summary with names + IDs so the LLM can make follow-up calls
+    world_lines = [f"- {w['name']} (id: {w['id']})" for w in world_dicts]
+    world_summary = "\n".join(world_lines)
+
     return ToolReturn(
-        return_value=f"Found {len(world_dicts)} worlds sorted by {sort}.",
+        return_value=f"Found {len(world_dicts)} worlds sorted by {sort}:\n{world_summary}",
         metadata=_emit_state(state),
     )
 
@@ -297,8 +305,12 @@ async def get_stories(
     state.panels = [UIPanel(type="story_list", data={"stories": story_dicts, "world_name": world_name})]
     state.breadcrumbs = ["Worlds", world_name, "Stories"]
 
+    # Include titles + IDs so the LLM can call get_story_detail
+    story_lines = [f"- \"{s['title']}\" (id: {s['id']})" for s in story_dicts]
+    story_summary = "\n".join(story_lines)
+
     return ToolReturn(
-        return_value=f"Found {len(story_dicts)} stories in {world_name}.",
+        return_value=f"Found {len(story_dicts)} stories in {world_name}:\n{story_summary}",
         metadata=_emit_state(state),
     )
 
@@ -379,8 +391,12 @@ async def get_dwellers(
     state.panels = [UIPanel(type="dweller_list", data={"dwellers": dweller_dicts, "world_name": world_name})]
     state.breadcrumbs = ["Worlds", world_name, "Dwellers"]
 
+    # Include names + IDs so the LLM can call get_dweller_detail
+    dweller_lines = [f"- {d['name']}, {d['role']} (id: {d['id']})" for d in dweller_dicts]
+    dweller_summary = "\n".join(dweller_lines)
+
     return ToolReturn(
-        return_value=f"Found {len(dweller_dicts)} dwellers in {world_name}.",
+        return_value=f"Found {len(dweller_dicts)} dwellers in {world_name}:\n{dweller_summary}",
         metadata=_emit_state(state),
     )
 
@@ -494,8 +510,12 @@ async def get_activity(
     state.panels = [UIPanel(type="activity_feed", data={"items": activity_items, "world_name": world_name})]
     state.breadcrumbs = ["Worlds", world_name, "Activity"]
 
+    # Include brief summaries so the LLM can narrate recent events
+    activity_lines = [f"- {a['action_type']}: {a['content'][:80]}" for a in activity_items[:5]]
+    activity_summary = "\n".join(activity_lines)
+
     return ToolReturn(
-        return_value=f"{len(activity_items)} recent activities in {world_name}.",
+        return_value=f"{len(activity_items)} recent activities in {world_name}:\n{activity_summary}",
         metadata=_emit_state(state),
     )
 
